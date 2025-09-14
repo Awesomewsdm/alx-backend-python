@@ -17,6 +17,8 @@ def with_db_connection(func):
 
 @with_db_connection 
 def get_user_by_id(user_id, conn=None): 
+    if conn is None:
+        raise RuntimeError("Database connection was not provided")
     cursor = conn.cursor() 
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,)) 
     return cursor.fetchone() 
