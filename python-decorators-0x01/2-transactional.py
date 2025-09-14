@@ -28,7 +28,9 @@ def transactional(func):
 
 @with_db_connection 
 @transactional 
-def update_user_email(conn, user_id, new_email): 
+def update_user_email(conn=None, user_id=None, new_email=None): 
+    if conn is None:
+        raise ValueError("Database connection not provided")
     cursor = conn.cursor() 
     cursor.execute("UPDATE users SET email = ? WHERE id = ?", (new_email, user_id)) 
 
