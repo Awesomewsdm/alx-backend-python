@@ -1,7 +1,9 @@
+import unittest
+
 try:
     from django.test import TestCase  # type: ignore
 except Exception:
-    from unittest import TestCase
+    TestCase = unittest.TestCase
 
 from django.contrib.auth import get_user_model  # type: ignore
 
@@ -68,3 +70,30 @@ class MessagingSignalTests(TestCase):
         # MessageHistory entries where edited_by is None may still exist, but
         # entries explicitly referencing the deleted user should be gone
         self.assertFalse(MessageHistory.objects.filter(edited_by=self.bob).exists())
+
+    def test_threaded_conversation_retrieval(self):
+        # Create a root message and replies
+        root = Message.objects.create(
+            sender=self.alice, receiver=self.bob, content="Root"
+        )
+        r1 = Message.objects.create(
+            sender=self.bob, receiver=self.alice, content="Reply 1", parent_message=root
+        )
+        r2 = Message.objects.create(
+            sender=self.alice, receiver=self.bob, content="Reply 2", parent_message=root
+        )
+        r1_1 = Message.objects.create(
+            sender=self.alice, receiver=self.bob, content="Reply 1.1", parent_message=r1
+        )
+
+        # Use the helper to fetch root messages with prefetching
+        qs = Message.fetch_thread_root_messages()
+        self.assertIn(root, list(qs))
+
+        # Ensure get_thread returns a nested structure
+        t = root.get_thread()
+        self.assertEqual(t["message"], root)
+        self.assertEqual(len(t["replies"]), 2)
+        # check nested reply
+        first_reply = [r for r in t["replies"] if r["message"].pk == r1.pk][0]
+        self.assertEqual(len(first_reply["replies"]), 1)

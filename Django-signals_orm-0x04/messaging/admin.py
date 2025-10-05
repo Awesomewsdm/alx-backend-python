@@ -6,8 +6,19 @@ from .models import MessageHistory
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ("id", "sender", "receiver", "timestamp")
+    list_display = (
+        "id",
+        "sender",
+        "receiver",
+        "timestamp",
+        "parent_message",
+        "reply_count",
+    )
     search_fields = ("sender__username", "receiver__username", "content")
+
+    @admin.display(description="Replies")
+    def reply_count(self, obj):
+        return obj.replies.count()
 
 
 @admin.register(Notification)

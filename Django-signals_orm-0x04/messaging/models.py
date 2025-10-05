@@ -15,6 +15,9 @@ class Message(models.Model):
     )
     content = models.TextField()
     edited = models.BooleanField(default=False)
+    parent_message = models.ForeignKey(
+        "self", related_name="replies", null=True, blank=True, on_delete=models.CASCADE
+    )
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -26,6 +29,33 @@ class Message(models.Model):
     def history(self):
         """Return QuerySet of MessageHistory entries for this message ordered newest first."""
         return MessageHistory.objects.filter(message=self).order_by("-edited_at")
+
+    def get_thread(self):
+        """Return this message and all replies recursively as a nested dict.
+
+        Note: This method uses the `replies` related_name and will be efficient
+        if the caller prefetched `replies` and `replies__sender` via
+        `prefetch_related('replies', 'replies__replies')` or similar.
+        """
+
+        def _gather(msg):
+            return {"message": msg, "replies": [_gather(r) for r in msg.replies.all()]}
+
+        return _gather(self)
+
+    @staticmethod
+    def fetch_thread_root_messages(qs=None):
+        """Return queryset of root messages (no parent) with replies prefetched.
+
+        Use select_related for FK to user and prefetch_related for replies to
+        minimize query count when rendering threads.
+        """
+        qs = qs if qs is not None else Message.objects.all()
+        return (
+            qs.filter(parent_message__isnull=True)
+            .select_related("sender", "receiver")
+            .prefetch_related("replies", "replies__sender", "replies__replies")
+        )
 
 
 class Notification(models.Model):
