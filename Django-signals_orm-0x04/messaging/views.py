@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.contrib.auth import get_user_model
 from django.views.decorators.http import require_POST
 from django.urls import reverse
+from django.views.decorators.cache import cache_page
 
 from .models import Message
 
@@ -31,6 +32,7 @@ def thread_list(request):
     return render(request, "messaging/thread_list.html", {"roots": roots})
 
 
+@cache_page(60)
 @login_required
 def thread_detail(request, pk):
     """Display a single thread (root message) with all replies built into a nested tree.
