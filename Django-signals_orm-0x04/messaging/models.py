@@ -14,6 +14,7 @@ class Message(models.Model):
         on_delete=models.CASCADE,
     )
     content = models.TextField()
+    edited = models.BooleanField(default=False)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -21,6 +22,10 @@ class Message(models.Model):
 
     def __str__(self):
         return f"From {self.sender} to {self.receiver} at {self.timestamp}"
+
+    def history(self):
+        """Return QuerySet of MessageHistory entries for this message ordered newest first."""
+        return MessageHistory.objects.filter(message=self).order_by("-edited_at")
 
 
 class Notification(models.Model):
@@ -40,3 +45,22 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification for {self.user} - message {self.message.pk}"
+
+
+class MessageHistory(models.Model):
+    """Keeps previous versions of a Message before edits."""
+
+    message = models.ForeignKey(
+        Message, related_name="history_entries", on_delete=models.CASCADE
+    )
+    old_content = models.TextField()
+    edited_at = models.DateTimeField(auto_now_add=True)
+    edited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
+    )
+
+    class Meta:
+        ordering = ["-edited_at"]
+
+    def __str__(self):
+        return f"History for message {self.message.pk} at {self.edited_at}"

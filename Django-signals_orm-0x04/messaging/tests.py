@@ -1,7 +1,13 @@
-from django.test import TestCase
-from django.contrib.auth import get_user_model
+try:
+    from django.test import TestCase  # type: ignore
+except Exception:
+    from unittest import TestCase
+
+from django.contrib.auth import get_user_model  # type: ignore
+
 
 from .models import Message, Notification
+from .models import MessageHistory
 
 
 User = get_user_model()
@@ -22,3 +28,20 @@ class MessagingSignalTests(TestCase):
         self.assertEqual(notifications.count(), 1)
         notif = notifications.first()
         self.assertFalse(notif.read)
+
+    def test_editing_message_creates_history(self):
+        msg = Message.objects.create(
+            sender=self.alice, receiver=self.bob, content="Original"
+        )
+
+        # Edit the message
+        msg.content = "Edited"
+        msg.save()
+
+        histories = MessageHistory.objects.filter(message=msg)
+        self.assertEqual(histories.count(), 1)
+        hist = histories.first()
+        self.assertEqual(hist.old_content, "Original")
+        # message should be marked as edited
+        msg.refresh_from_db()
+        self.assertTrue(msg.edited)
