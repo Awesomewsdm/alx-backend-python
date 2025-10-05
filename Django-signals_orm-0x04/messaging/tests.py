@@ -97,3 +97,18 @@ class MessagingSignalTests(TestCase):
         # check nested reply
         first_reply = [r for r in t["replies"] if r["message"].pk == r1.pk][0]
         self.assertEqual(len(first_reply["replies"]), 1)
+
+        def test_unread_manager_filters_unread(self):
+            # create two messages, mark one as read
+            m1 = Message.objects.create(
+                sender=self.alice, receiver=self.bob, content="Unread"
+            )
+            m2 = Message.objects.create(
+                sender=self.alice, receiver=self.bob, content="Read"
+            )
+            m2.read = True
+            m2.save()
+
+            unread_qs = Message.objects.filter(read=False, receiver=self.bob)
+            self.assertIn(m1, list(unread_qs))
+            self.assertNotIn(m2, list(unread_qs))

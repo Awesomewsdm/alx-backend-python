@@ -76,10 +76,11 @@ def thread_detail(request, pk):
 @login_required
 def inbox(request):
     """Show messages received by the current user with sender preloaded."""
+    # Use the custom manager to fetch unread messages and only retrieve minimal fields.
     qs = (
-        Message.objects.filter(receiver=request.user)
-        .select_related("sender", "receiver")
-        .prefetch_related("replies")
+        Message.unread.for_user(request.user)
+        .select_related("sender")
+        .only("id", "sender_id", "content", "timestamp")
     )
     return render(request, "messaging/inbox.html", {"messages": qs})
 

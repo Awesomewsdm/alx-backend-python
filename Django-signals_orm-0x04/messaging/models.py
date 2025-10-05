@@ -18,6 +18,7 @@ class Message(models.Model):
     parent_message = models.ForeignKey(
         "self", related_name="replies", null=True, blank=True, on_delete=models.CASCADE
     )
+    read = models.BooleanField(default=False)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -56,6 +57,18 @@ class Message(models.Model):
             .select_related("sender", "receiver")
             .prefetch_related("replies", "replies__sender", "replies__replies")
         )
+
+
+class UnreadMessagesManager(models.Manager):
+    """Manager to filter unread messages for a given user."""
+
+    def for_user(self, user):
+        # Messages received by the user and not read yet
+        return self.get_queryset().filter(receiver=user, read=False)
+
+
+# attach custom manager as `unread`
+Message.add_to_class("unread", UnreadMessagesManager())
 
 
 class Notification(models.Model):
