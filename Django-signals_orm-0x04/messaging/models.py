@@ -61,7 +61,6 @@ class Message(models.Model):
             .prefetch_related("replies", "replies__sender", "replies__replies")
         )
 
-
     read = models.BooleanField(default=False)
 
 
