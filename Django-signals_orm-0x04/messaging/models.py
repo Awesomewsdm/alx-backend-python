@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from .managers import UnreadMessagesManager
 
 
 class Message(models.Model):
@@ -19,6 +20,8 @@ class Message(models.Model):
         "self", related_name="replies", null=True, blank=True, on_delete=models.CASCADE
     )
     read = models.BooleanField(default=False)
+    # expose the unread manager on the model class for static analysis/tools
+    unread = UnreadMessagesManager()
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -59,16 +62,10 @@ class Message(models.Model):
         )
 
 
-class UnreadMessagesManager(models.Manager):
-    """Manager to filter unread messages for a given user."""
-
-    def for_user(self, user):
-        # Messages received by the user and not read yet
-        return self.get_queryset().filter(receiver=user, read=False)
+    read = models.BooleanField(default=False)
 
 
-# attach custom manager as `unread`
-Message.add_to_class("unread", UnreadMessagesManager())
+# Note: `unread` manager is declared as a class attribute on Message above.
 
 
 class Notification(models.Model):

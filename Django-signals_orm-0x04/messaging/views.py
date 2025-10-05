@@ -78,7 +78,7 @@ def inbox(request):
     """Show messages received by the current user with sender preloaded."""
     # Use the custom manager to fetch unread messages and only retrieve minimal fields.
     qs = (
-        Message.unread.for_user(request.user)
+        Message.unread.unread_for_user(request.user)
         .select_related("sender")
         .only("id", "sender_id", "content", "timestamp")
     )
