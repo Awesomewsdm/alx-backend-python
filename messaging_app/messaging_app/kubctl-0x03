@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# kubctl-0x03
+# Bash script to apply updated blue deployment (image: 2.0), trigger rolling update,
+# monitor rollout status, and perform continuous curl checks to detect downtime.
+
+set -euo pipefail
+
+NAMESPACE=default
+DEPLOYMENT_NAME=messaging-app-blue
+SERVICE_NAME=messaging-app-stable
+PORT=8000
+LOCAL_PORT=8000
+
+# Apply the updated deployment file (assumes blue_deployment.yaml is at repository root messaging_app/)
+kubectl apply -f ./messaging_app/blue_deployment.yaml -n "$NAMESPACE"
+
+echo "Waiting for rollout to start..."
+kubectl rollout status deployment/$DEPLOYMENT_NAME -n "$NAMESPACE" --watch=true &
+ROLLOUT_PID=$!
+
+# Start port-forward in background so we can curl the service locally
+kubectl port-forward svc/$SERVICE_NAME $LOCAL_PORT:$PORT -n "$NAMESPACE" >/dev/null 2>&1 &
+PF_PID=$!
+sleep 2
+
+# Monitor rollout while continuously curling the service to detect downtime
+echo "Starting continuous curl checks against http://127.0.0.1:$LOCAL_PORT/ ..."
+FAIL_COUNT=0
+TOTAL=0
+START=$(date +%s)
+DURATION=30 # seconds to run curl checks during rollout
+END=$((START + DURATION))
+
+while [ $(date +%s) -lt $END ]; do
+  TOTAL=$((TOTAL + 1))
+  if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$LOCAL_PORT/ | grep -q "200"; then
+    echo "OK"
+  else
+    echo "FAIL"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+  fi
+  sleep 1
+done
+
+# Wait for rollout to complete (if not already)
+wait $ROLLOUT_PID || true
+
+# Cleanup port-forward
+kill $PF_PID || true
+
+# Show final pod status
+kubectl get pods -l app=messaging-app -n "$NAMESPACE"
+
+echo "Rolling update test completed. Total checks: $TOTAL, failures: $FAIL_COUNT"
+if [ $FAIL_COUNT -eq 0 ]; then
+  echo "No downtime detected during the test period."
+else
+  echo "Some requests failed during the test period. Investigate pod logs and readiness probes."
+fi

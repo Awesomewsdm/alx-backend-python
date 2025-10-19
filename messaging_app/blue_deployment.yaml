@@ -19,8 +19,8 @@ spec:
     spec:
       containers:
         - name: messaging-app
-          # Replace with your blue image (current production)
-          image: your-registry/messaging-app:blue
+          # Updated blue image to version 2.0
+          image: your-registry/messaging-app:2.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
