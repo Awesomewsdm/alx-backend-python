@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# kurbeScript
+# Simple script to start a local Kubernetes cluster using minikube,
+# verify it with kubectl, and list pods.
+#
+# Notes:
+# - This script assumes you have Docker available as a driver for minikube.
+# - It checks for presence of `minikube` and `kubectl` and prints guidance if missing.
+# - On Windows, run this from Git Bash, WSL, or adapt the PowerShell commands below.
+
+set -euo pipefail
+
+info() { echo "[INFO] $*"; }
+warn() { echo "[WARN] $*"; }
+err() { echo "[ERROR] $*" >&2; }
+
+# Check for minikube
+if ! command -v minikube >/dev/null 2>&1; then
+  err "minikube is not installed."
+  echo
+  echo "Please install minikube and try again. Quick install hints:"
+  echo "  Linux/macOS (curl):"
+  echo "    curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && sudo install minikube-linux-amd64 /usr/local/bin/minikube"
+  echo "    # or for macOS (Intel): curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-darwin-amd64 && sudo install minikube-darwin-amd64 /usr/local/bin/minikube"
+  echo
+  echo "  Windows (PowerShell + Chocolatey):"
+  echo "    choco install minikube"
+  echo "  or use https://minikube.sigs.k8s.io/docs/start/ for platform-specific instructions"
+  exit 2
+fi
+
+# Check for kubectl
+if ! command -v kubectl >/dev/null 2>&1; then
+  err "kubectl is not installed."
+  echo
+  echo "Install kubectl:"
+  echo "  Linux/macOS (curl): curl -LO \"https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl\" && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl"
+  echo "  Windows (PowerShell + Chocolatey): choco install kubernetes-cli"
+  exit 3
+fi
+
+info "Detected minikube: $(minikube version | head -n1)"
+info "Detected kubectl: $(kubectl version --client --short 2>/dev/null || echo 'kubectl (unknown version)')"
+
+# Start minikube (use docker driver by default)
+DRIVER=${MINIKUBE_DRIVER:-docker}
+info "Starting minikube with driver=${DRIVER}..."
+
+# Try to start minikube; if already running, this will be quick
+if minikube status >/dev/null 2>&1; then
+  info "minikube status:"
+  minikube status
+fi
+
+# Start cluster
+minikube start --driver="$DRIVER"
+
+info "Waiting for kubectl cluster-info..."
+# Wait for cluster-info to succeed (with timeout)
+MAX_TRIES=15
+SLEEP_SECONDS=2
+count=0
+until kubectl cluster-info >/dev/null 2>&1; do
+  count=$((count+1))
+  if [ "$count" -ge "$MAX_TRIES" ]; then
+    err "kubectl cluster-info failed after $((MAX_TRIES*SLEEP_SECONDS))s."
+    kubectl cluster-info || true
+    exit 4
+  fi
+  info "waiting for cluster... ($count/$MAX_TRIES)"
+  sleep $SLEEP_SECONDS
+done
+
+info "Cluster is up. kubectl cluster-info output:"
+kubectl cluster-info
+
+info "Retrieving pods in all namespaces:"
+kubectl get pods --all-namespaces
+
+info "Done. To open the Kubernetes dashboard (minikube), run: minikube dashboard"
+
+# End of script
