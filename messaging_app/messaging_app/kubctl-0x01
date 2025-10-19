@@ -1,0 +1,75 @@
+#!/usr/bin/env pwsh
+# kubctl-0x01
+# PowerShell script to scale the `messaging-app` Deployment to 3 replicas,
+# verify pods, run a short wrk load test against the service via port-forward,
+# and display resource usage via kubectl top.
+
+# Notes:
+# - Requires: kubectl, wrk (https://github.com/wg/wrk), optionally minikube.
+# - metrics-server must be installed in the cluster for `kubectl top` to return data.
+# - Run from a shell with access to kubectl context (e.g., minikube).
+
+param()
+set -e
+
+function Check-CommandExists {
+    param([string]$cmd)
+    $null -ne (Get-Command $cmd -ErrorAction SilentlyContinue)
+}
+
+if (-not (Check-CommandExists kubectl)) {
+    Write-Error "kubectl is not installed or not in PATH. Install kubectl and try again."
+    exit 1
+}
+
+if (-not (Check-CommandExists wrk)) {
+    Write-Warning "wrk is not installed or not in PATH. Load-testing step will be skipped."
+}
+
+$deploymentName = "messaging-app-deployment"
+$labelSelector = "app=messaging-app"
+$namespace = "default"
+$replicas = 3
+
+Write-Host "Scaling Deployment '$deploymentName' to $replicas replicas..."
+kubectl scale deployment/$deploymentName --replicas=$replicas -n $namespace
+
+Write-Host "Waiting for pods to be ready..."
+# wait up to 60s
+$timeout = 60
+$start = Get-Date
+while ((Get-Date) - $start).TotalSeconds -lt $timeout) {
+    $pods = kubectl get pods -n $namespace -l $labelSelector --no-headers | Select-String "Running"
+    $count = if ($pods) { $pods.Count } else { 0 }
+    if ($count -ge $replicas) { break }
+    Start-Sleep -Seconds 2
+}
+
+Write-Host "Pods for selector '$labelSelector':"
+kubectl get pods -n $namespace -l $labelSelector
+
+if (Get-Command wrk -ErrorAction SilentlyContinue) {
+    # Port-forward service to localhost so wrk can hit it. We'll use port 8000 -> pod 8000
+    $localPort = 8000
+    Write-Host "Starting port-forward to service 'messaging-app-service' on localhost:$localPort..."
+
+    $pf = Start-Process -FilePath kubectl -ArgumentList "port-forward svc/messaging-app-service $localPort:8000 -n $namespace" -NoNewWindow -PassThru
+n    Start-Sleep -Seconds 2
+
+    Write-Host "Running wrk short benchmark (10s, 2 threads, 100 connections)..."
+    & wrk -t2 -c100 -d10s http://127.0.0.1:$localPort/
+
+    Write-Host "Stopping port-forward..."
+    try {
+        $pf | Stop-Process -ErrorAction SilentlyContinue
+    } catch {
+        Write-Warning "Failed to stop port-forward process cleanly. You may need to stop it manually."
+    }
+} else {
+    Write-Warning "wrk not available; skipping load test. You can install wrk or run your own load test."
+}
+
+Write-Host "Showing kubectl top pods for selector '$labelSelector' (requires metrics-server)..."
+kubectl top pods -n $namespace -l $labelSelector || Write-Warning "kubectl top failed - metrics-server may not be installed or available."
+
+Write-Host "Done."
