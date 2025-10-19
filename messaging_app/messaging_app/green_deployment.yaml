@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: messaging-app-green
+  labels:
+    app: messaging-app
+    version: green
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: messaging-app
+      version: green
+  template:
+    metadata:
+      labels:
+        app: messaging-app
+        version: green
+    spec:
+      containers:
+        - name: messaging-app
+          # Replace with your green image (new version to promote)
+          image: your-registry/messaging-app:green
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: messaging_app.settings
+            - name: DATABASE_URL
+              value: "mysql://root:password@mysql:3306/messaging_db"
+          readinessProbe:
+            httpGet:
+              path: /health/
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20

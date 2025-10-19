@@ -1,0 +1,52 @@
+#!/usr/bin/env pwsh
+# kubctl-0x02
+# PowerShell script to perform a blue-green deployment for the messaging app.
+
+set -e
+
+function Check-CommandExists { param([string]$cmd) $null -ne (Get-Command $cmd -ErrorAction SilentlyContinue) }
+if (-not (Check-CommandExists kubectl)) { Write-Error "kubectl not found"; exit 1 }
+
+$namespace = "default"
+$stableService = "messaging-app-stable"
+$greenDeploy = "messaging-app-green"
+$blueDeploy = "messaging-app-blue"
+
+Write-Host "Applying blue deployment (current) and stable service..."
+kubectl apply -f .\messaging_app\messaging_app\blue_deployment.yaml -n $namespace
+kubectl apply -f .\messaging_app\messaging_app\kubeservice.yaml -n $namespace
+
+Write-Host "Applying green deployment (new version)..."
+kubectl apply -f .\messaging_app\messaging_app\green_deployment.yaml -n $namespace
+
+Write-Host "Waiting for green pods to be ready..."
+$timeout = 60
+$start = Get-Date
+while ((Get-Date) - $start).TotalSeconds -lt $timeout) {
+    $ready = kubectl get pods -n $namespace -l app=messaging-app,version=green --no-headers | Select-String "Running"
+    if ($ready -and $ready.Count -ge 1) { break }
+    Start-Sleep -Seconds 2
+}
+
+Write-Host "Green pods:"
+kubectl get pods -n $namespace -l app=messaging-app,version=green
+
+Write-Host "Inspecting green pod logs for errors (last 200 lines)..."
+$greenPod = kubectl get pods -n $namespace -l app=messaging-app,version=green -o jsonpath="{.items[0].metadata.name}"
+if ($greenPod) {
+    kubectl logs -n $namespace $greenPod --tail=200
+} else {
+    Write-Warning "No green pod found to fetch logs from."
+    exit 1
+}
+
+Write-Host "If green looks healthy, patching stable service selector to version=green to switch traffic..."
+kubectl patch svc $stableService -n $namespace --type=json -p '[{"op":"replace","path":"/spec/selector/version","value":"green"}]'
+
+Write-Host "Stable service now points to green. Verifying endpoints..."
+kubectl get endpoints $stableService -n $namespace
+
+Write-Host "Blue-green switch completed. If anything goes wrong you can patch the service back to 'blue':"
+Write-Host "kubectl patch svc $stableService -n $namespace --type=json -p '[{\"op\":\"replace\",\"path\":\"/spec/selector/version\",\"value\":\"blue\"}]'"
+
+Write-Host "Done."
