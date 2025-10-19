@@ -1,0 +1,5 @@
+kubectl apply -f messaging_app/messaging_app/ingress.yaml
+# If you need to install the NGINX ingress controller, you can use:
+# kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+# or with Helm:
+# helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx; helm repo update; helm install ingress-nginx ingress-nginx/ingress-nginx
