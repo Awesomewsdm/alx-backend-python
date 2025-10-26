@@ -39,20 +39,19 @@ pipeline {
 
     stage('Setup Python') {
       steps {
-        dir("${REPO_SUBDIR}") {
-          sh '''
-          set -e
-          echo "Creating venv..."
-          python3 -m venv venv || python -m venv venv
-          . venv/bin/activate
-          pip install --upgrade pip
-          # install test deps - adjust requirements file path if needed
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt || true
-          fi
-          pip install pytest pytest-cov junit-xml || true
-          '''
-        }
+        // create venv inside the messaging_app subfolder and install deps using pip3
+        sh '''
+        set -e
+        echo "Creating venv in messaging_app/venv..."
+        python3 -m venv messaging_app/venv || python -m venv messaging_app/venv
+        . messaging_app/venv/bin/activate
+        pip3 install --upgrade pip
+        # install test deps from messaging_app/requirements.txt if present
+        if [ -f messaging_app/requirements.txt ]; then
+          pip3 install -r messaging_app/requirements.txt || true
+        fi
+        pip3 install pytest pytest-cov junit-xml || true
+        '''
       }
     }
 
@@ -61,6 +60,7 @@ pipeline {
         dir("${REPO_SUBDIR}") {
           sh '''
           set -e
+          # activate the venv created in messaging_app/venv
           . venv/bin/activate
           mkdir -p reports
           # Run pytest and output JUnit xml for Jenkins to pick up
