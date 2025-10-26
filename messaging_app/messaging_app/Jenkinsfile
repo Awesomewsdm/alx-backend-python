@@ -20,6 +20,9 @@ pipeline {
     REPO_SUBDIR = 'messaging_app'
     # Change this to the credentials ID you create in Jenkins (username/password or token)
     GIT_CREDENTIALS = 'github-creds'
+    // Docker Hub image name (change to your Docker Hub repo)
+    DOCKER_IMAGE = 'your-dockerhub-username/messaging-app'
+    DOCKER_CREDENTIALS = 'dockerhub-creds'
   }
 
   options {
@@ -79,10 +82,20 @@ pipeline {
 
     stage('Optional: Package / Build image') {
       when {
-        expression { return false }
+        expression { return true }
       }
       steps {
-        echo 'Build and push docker image here (if desired)'
+        // Build and push image to Docker Hub using credentials stored in Jenkins
+        withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PWD')]) {
+          sh '''
+          set -e
+          TAG=${BUILD_NUMBER:-latest}
+          echo "Building Docker image ${DOCKER_IMAGE}:${TAG}"
+          docker build -t ${DOCKER_IMAGE}:${TAG} ./messaging_app
+          echo $DOCKER_PWD | docker login -u $DOCKER_USER --password-stdin
+          docker push ${DOCKER_IMAGE}:${TAG}
+          '''
+        }
       }
     }
   }
