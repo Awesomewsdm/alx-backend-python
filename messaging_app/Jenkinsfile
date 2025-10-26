@@ -1,0 +1,98 @@
+/*
+Declarative Jenkins Pipeline for the messaging_app
+
+Requirements & Notes:
+- Start Jenkins locally (docker):
+  docker run -d --name jenkins -p 8080:8080 -p 50000:50000 -v jenkins_home:/var/jenkins_home jenkins/jenkins:lts
+- Install required plugins in Jenkins UI: Git plugin, Pipeline, ShiningPanda (optional if you want Python virtualenv steps via Jenkins UI).
+- Add a Jenkins credential with ID `github-creds` that has access to the repository (username/password or personal access token). If repo is public, credentials are optional.
+- This Pipeline will run on a Jenkins agent that supports shell (Linux). If you use a Windows agent, change shell steps accordingly.
+- The pipeline checks out the repository, changes into the `messaging_app` directory, creates a venv, installs requirements, runs pytest and publishes test results (JUnit XML).
+
+Adjust the `credentialsId` value if you used a different ID in Jenkins credentials.
+*/
+
+pipeline {
+  agent any
+
+  environment {
+    GIT_URL = 'https://github.com/Awesomewsdm/alx-backend-python.git'
+    REPO_SUBDIR = 'messaging_app'
+    # Change this to the credentials ID you create in Jenkins (username/password or token)
+    GIT_CREDENTIALS = 'github-creds'
+  }
+
+  options {
+    // keep builds around for some days if you want
+    buildDiscarder(logRotator(numToKeepStr: '30'))
+    timestamps()
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        // Checkout the repo using Jenkins-provided git step and credentials
+        echo "Checking out ${GIT_URL}"
+        git branch: 'main', url: "${GIT_URL}", credentialsId: "${GIT_CREDENTIALS}"
+      }
+    }
+
+    stage('Setup Python') {
+      steps {
+        dir("${REPO_SUBDIR}") {
+          sh '''
+          set -e
+          echo "Creating venv..."
+          python3 -m venv venv || python -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          # install test deps - adjust requirements file path if needed
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt || true
+          fi
+          pip install pytest pytest-cov junit-xml || true
+          '''
+        }
+      }
+    }
+
+    stage('Run Tests') {
+      steps {
+        dir("${REPO_SUBDIR}") {
+          sh '''
+          set -e
+          . venv/bin/activate
+          mkdir -p reports
+          # Run pytest and output JUnit xml for Jenkins to pick up
+          pytest -q --junitxml=reports/junit.xml || true
+          '''
+        }
+      }
+      post {
+        always {
+          // Archive and publish test results
+          junit "${REPO_SUBDIR}/reports/junit.xml"
+          archiveArtifacts artifacts: "${REPO_SUBDIR}/reports/**", allowEmptyArchive: true
+        }
+      }
+    }
+
+    stage('Optional: Package / Build image') {
+      when {
+        expression { return false } // toggle to true to add image build/push steps
+      }
+      steps {
+        echo 'Build and push docker image here (if desired)'
+      }
+    }
+  }
+
+  post {
+    success {
+      echo 'Pipeline succeeded.'
+    }
+    failure {
+      echo 'Pipeline failed. Check test reports and console output.'
+    }
+  }
+}
