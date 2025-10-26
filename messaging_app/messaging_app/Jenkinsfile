@@ -79,7 +79,7 @@ pipeline {
 
     stage('Optional: Package / Build image') {
       when {
-        expression { return false } // toggle to true to add image build/push steps
+        expression { return false }
       }
       steps {
         echo 'Build and push docker image here (if desired)'
